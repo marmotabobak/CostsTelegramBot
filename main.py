@@ -55,14 +55,13 @@ dp = Dispatcher(bot)
 @dp.message_handler(commands=['start', 'help'])
 async def process_start_command(message: types.Message):
     global postgres_connected
-    print(postgres_connected)
     if postgres_connected:
         output_text = 'Введи расход в формате: продукты 500 либо выбери пункт меню'
         markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=1)
         markup.add(types.KeyboardButton('Мои расходы в этом месяце'))
-        for user in bot_settings.TG_USERS.values():
-            if user != message.from_user.id:
-                markup.add(types.KeyboardButton('Расходы ' + user + ' в этом месяце'))
+        for k, v in bot_settings.TG_USERS.items():
+            if k != message.from_user.id:
+                markup.add(types.KeyboardButton('Расходы ' + v + ' в этом месяце'))
     else:
         output_text = '! Ошибка подключения к БД - бот недоступен !'
     await message.answer(output_text, reply_markup=markup)
@@ -74,6 +73,25 @@ async def view_my_costs(message: types.Message):
     current_month = datetime.datetime.now().month
     current_total = 0
     query = f'SELECT * FROM costs where extract(month from cost_datetime) = \'{current_month}\' and extract(year from cost_datetime) = \'{current_year}\' and user_tg_id=\'{message.from_user.id}\''
+    print('--- INFO --- Выоленение выборки из БД:', query)
+    postgres_cursor.execute(query)
+    for record in postgres_cursor.fetchall():
+        output_text += f'{record[3].strftime("%d")} {record[1]} {record[2]}\n'
+        current_total += int(record[2])
+    output_text += f'Всего за месяц: {current_total}'
+    await message.answer(output_text)
+
+@dp.message_handler(regexp='Расходы .+ в этом месяце')
+async def view_my_costs(message: types.Message):
+    another_user_name = message.text.split()[1]
+    another_user_name_index = tuple(bot_settings.TG_USERS.values()).index(another_user_name)
+    another_user_tg_id = tuple(bot_settings.TG_USERS.keys())[another_user_name_index]
+    output_text = ''
+    current_year = datetime.datetime.now().year
+    current_month = datetime.datetime.now().month
+    current_total = 0
+    query = f'SELECT * FROM costs where extract(month from cost_datetime) = \'{current_month}\' and extract(year from cost_datetime) = \'{current_year}\' and user_tg_id=\'{another_user_tg_id}\''
+    print('--- INFO --- Выоленение выборки из БД:', query)
     postgres_cursor.execute(query)
     for record in postgres_cursor.fetchall():
         output_text += f'{record[3].strftime("%d")} {record[1]} {record[2]}\n'

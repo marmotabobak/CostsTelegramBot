@@ -12,7 +12,7 @@ class DatabaseInsertError(Exception):
 
 def write_message_to_db(message_text: str, message_datetime: datetime, user_tg_id: int, postgres_cursor, postgres_connection) -> None:
     try:
-        query = f'INSERT INTO messages (message_text, message_datetime, user_tg_id) VALUES (\'{message_text}\', \'{message_datetime}\', {user_tg_id})'
+        query = f'INSERT INTO messages (message_text, message_datetime, user_tg_id) VALUES (\'{message_text}\', \'{message_datetime}\', \'{user_tg_id}\')'
         postgres_cursor.execute(query)
         postgres_connection.commit()
         print('--- INFO --- Сообщение успешно записпно в БД (messages):', message_text, 'от', user_tg_id)
@@ -24,7 +24,7 @@ def write_message_to_db(message_text: str, message_datetime: datetime, user_tg_i
 
 def write_cost_to_db(cost_name: str, cost_amount: float, cost_datetime: datetime, cost_message: str, user_tg_id: int, postgres_cursor, postgres_connection) -> None:
     try:
-        query = f'INSERT INTO costs (cost_name, cost_amount, cost_datetime, cost_message, user_tg_id) VALUES (\'{cost_name}\', {cost_amount}, \'{cost_datetime}\', \'{cost_message}\', {user_tg_id})'
+        query = f'INSERT INTO costs (cost_name, cost_amount, cost_datetime, cost_message, user_tg_id) VALUES (\'{cost_name}\', {cost_amount}, \'{cost_datetime}\', \'{cost_message}\', \'{user_tg_id}\')'
         postgres_cursor.execute(query)
         postgres_connection.commit()
         print('--- INFO --- Сообщение успешно записпно в БД (costs):', cost_message, 'от', user_tg_id)
@@ -54,18 +54,32 @@ dp = Dispatcher(bot)
 
 @dp.message_handler(commands=['start', 'help'])
 async def process_start_command(message: types.Message):
+    global postgres_connected
+    print(postgres_connected)
     if postgres_connected:
         output_text = 'Введи расход в формате: продукты 500 либо выбери пункт меню'
         markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=1)
         markup.add(types.KeyboardButton('Мои расходы в этом месяце'))
-        markup.add(types.KeyboardButton('Мои расходы в прошлом месяце'))
-    for user in bot_settings.TG_USERS.values():
-        markup.add(types.KeyboardButton('Расходы ' + user + ' в этом месяце'))
-        markup.add(types.KeyboardButton('Расходы ' + user + ' в прошлом месяце'))
-
+        for user in bot_settings.TG_USERS.values():
+            if user != message.from_user.id:
+                markup.add(types.KeyboardButton('Расходы ' + user + ' в этом месяце'))
     else:
         output_text = '! Ошибка подключения к БД - бот недоступен !'
     await message.answer(output_text, reply_markup=markup)
+
+@dp.message_handler(regexp='Мои расходы в этом месяце')
+async def view_my_costs(message: types.Message):
+    output_text = ''
+    current_year = datetime.datetime.now().year
+    current_month = datetime.datetime.now().month
+    current_total = 0
+    query = f'SELECT * FROM costs where extract(month from cost_datetime) = \'{current_month}\' and extract(year from cost_datetime) = \'{current_year}\' and user_tg_id=\'{message.from_user.id}\''
+    postgres_cursor.execute(query)
+    for record in postgres_cursor.fetchall():
+        output_text += f'{record[3].strftime("%d")} {record[1]} {record[2]}\n'
+        current_total += int(record[2])
+    output_text += f'Всего за месяц: {current_total}'
+    await message.answer(output_text)
 
 @dp.message_handler(lambda message: message.from_user.id in bot_settings.TG_USERS)
 async def process_regular_message(message: types.Message):

@@ -15,10 +15,10 @@ try:
         CREATE TABLE IF NOT EXISTS costs (
             cost_id SERIAL PRIMARY KEY,
             cost_name VARCHAR(255),
-            cost_amount FLOAT,
+            cost_amount INT,
             cost_datetime TIMESTAMP,
             cost_message VARCHAR(255),
-            user_tg_id INT);
+            user_tg_id VARCHAR(50));
         '''
     posgtres_cursor.execute(query)
     postgres_connection.commit()
@@ -28,7 +28,7 @@ try:
             message_id SERIAL PRIMARY KEY,
             message_text VARCHAR(255),
             message_datetime TIMESTAMP,
-            user_tg_id INT);
+            user_tg_id varchar(50));
         '''
     posgtres_cursor.execute(query)
     postgres_connection.commit()

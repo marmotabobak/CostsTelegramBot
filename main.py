@@ -55,13 +55,17 @@ dp = Dispatcher(bot)
 @dp.message_handler(commands=['start', 'help'])
 async def process_start_command(message: types.Message):
     if postgres_connected:
-        output_text = 'Введи расход в формате: продукты 500'
-        print(message.from_user.id)
-        print(bot_settings.TG_USERS)
-        print(message.from_user.id in bot_settings.TG_USERS)
+        output_text = 'Введи расход в формате: продукты 500 либо выбери пункт меню'
+        markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=1)
+        markup.add(types.KeyboardButton('Мои расходы в этом месяце'))
+        markup.add(types.KeyboardButton('Мои расходы в прошлом месяце'))
+    for user in bot_settings.TG_USERS.values():
+        markup.add(types.KeyboardButton('Расходы ' + user + ' в этом месяце'))
+        markup.add(types.KeyboardButton('Расходы ' + user + ' в прошлом месяце'))
+
     else:
         output_text = '! Ошибка подключения к БД - бот недоступен !'
-    await message.answer(output_text)
+    await message.answer(output_text, reply_markup=markup)
 
 @dp.message_handler(lambda message: message.from_user.id in bot_settings.TG_USERS)
 async def process_regular_message(message: types.Message):

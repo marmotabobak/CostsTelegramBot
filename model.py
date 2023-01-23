@@ -30,12 +30,3 @@ class PostgresSettings(Config):
 
     class Config:
         allow_mutation = False
-
-def load_from_config(module: Modules):
-    # TODO: parse input command line args here
-    CONFIG_DIR = 'settings/'
-    CONFIG_FILE_PATTERN = '_settings.yml'
-    CONFIG_MODULES = {
-        'bot': TgBotSettings,
-        'db': PostgresSettings
-    }

@@ -1,55 +1,69 @@
-import datetime, time
+#TODO: close Postgres cursors and sessions after use - do it "with..."
+import datetime
+import logging
+import yaml
 
 from aiogram import Bot, Dispatcher, types, executor
 import psycopg2
-from psycopg2 import Error
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-from settings import bot_settings, db_settings
+from model import TgBotSettings, PostgresSettings, Modules
+
+logging.basicConfig(format='[%(asctime)s | %(levelname)s]: %(message)s', datefmt='%m.%d.%Y %H:%M:%S', level=logging.INFO)
+
+
+
+
+def load_from_config(module: Modules):
+    # TODO: parse input command line args here
+    CONFIG_DIR = 'settings/'
+    CONFIG_FILE_PATTERN = '_settings.yml'
+    CONFIG_MODULES = {
+        'bot': TgBotSettings,
+        'db': PostgresSettings
+    }
+
+    settings_file_name = CONFIG_DIR + module.value + CONFIG_FILE_PATTERN
+    with open(settings_file_name, 'r') as settings_file:
+        settings_dict = yaml.safe_load(settings_file)
+        try:
+            settings = CONFIG_MODULES[module.value].parse_obj(settings_dict)
+            logging.info(f'SERVICE: {module.value} config loaded from file: {settings_file_name}')
+        except ValueError as e:
+            logging.error(f'SERVICE: Error while loading {module.value} config from file')
+            raise e
+    return settings
+
+db_settings = load_from_config(Modules.db)
+tg_bot_settings = load_from_config(Modules.bot)
 
 class DatabaseInsertError(Exception):
     pass
 
 def write_message_to_db(message_text: str, message_datetime: datetime, user_tg_id: int, postgres_cursor, postgres_connection) -> None:
-    try:
-        query = f'INSERT INTO messages (message_text, message_datetime, user_tg_id) VALUES (\'{message_text}\', \'{message_datetime}\', \'{user_tg_id}\')'
-        postgres_cursor.execute(query)
-        postgres_connection.commit()
-        print('--- INFO --- Сообщение успешно записпно в БД (messages):', message_text, 'от', user_tg_id)
-        print('Текст запроса:', query)
-    except:
-        print('--- ERROR --- Ошибка при записи в БД (messages) сообщения:', message_text, 'от', user_tg_id)
-        print('Текст запроса:', query)
-        raise DatabaseInsertError('Ошибка при записи в БД (messages) сообщения') from None
+    query = f'INSERT INTO messages (message_text, message_datetime, user_tg_id) VALUES (\'{message_text}\', \'{message_datetime}\', \'{user_tg_id}\')'
+    postgres_cursor.execute(query)
+    postgres_connection.commit()
+    logging.info('SERVICE: Message has been recorded to the messages table.')
 
 def write_cost_to_db(cost_name: str, cost_amount: float, cost_datetime: datetime, cost_message: str, user_tg_id: int, postgres_cursor, postgres_connection) -> None:
-    try:
-        query = f'INSERT INTO costs (cost_name, cost_amount, cost_datetime, cost_message, user_tg_id) VALUES (\'{cost_name}\', {cost_amount}, \'{cost_datetime}\', \'{cost_message}\', \'{user_tg_id}\')'
-        postgres_cursor.execute(query)
-        postgres_connection.commit()
-        print('--- INFO --- Сообщение успешно записпно в БД (costs):', cost_message, 'от', user_tg_id)
-        print('Текст запроса:', query)
-    except:
-        print('--- ERROR --- Ошибка при записи в БД (costs) сообщения:', cost_message, 'от', user_tg_id)
-        print('Текст запроса:', query)
-        raise DatabaseInsertError('Ошибка при записи в БД (costs) сообщения') from None
+    query = f'INSERT INTO costs (cost_name, cost_amount, cost_datetime, cost_message, user_tg_id) VALUES (\'{cost_name}\', {cost_amount}, \'{cost_datetime}\', \'{cost_message}\', \'{user_tg_id}\')'
+    postgres_cursor.execute(query)
+    postgres_connection.commit()
+    logging.info('SERVICE: Message has been recorded to the costs table.')
 
-try:
-    postgres_connection = psycopg2.connect(
-        user=db_settings.postgres_user,
-        password=db_settings.postgres_psswd,
-        host=db_settings.postgres_host,
-        port=db_settings.postgres_port
-    )
-    postgres_cursor = postgres_connection.cursor()
-    print('--- INFO --- Подулючились к БД:', postgres_connection)
+
+postgres_connection = psycopg2.connect(
+    user=db_settings.user,
+    password=db_settings.psswd,
+    host=db_settings.host,
+    port=db_settings.port
+)
+postgres_cursor = postgres_connection.cursor()
+logging.info('SERVICE: Connected to database')
+if postgres_cursor:
     postgres_connected = True
-except:
-    print('--- ERROR --- Проблема подключения к БД')
-    postgres_connected = False
 
-
-bot = Bot(token=bot_settings.TG_API_TOKEN)
+bot = Bot(token=tg_bot_settings.tg_bot_api_token)
 dp = Dispatcher(bot)
 
 @dp.message_handler(commands=['start', 'help'])
@@ -59,9 +73,9 @@ async def process_start_command(message: types.Message):
         output_text = 'Введи расход в формате: продукты 500 либо выбери пункт меню'
         markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=1)
         markup.add(types.KeyboardButton('Мои расходы в этом месяце'))
-        for k, v in bot_settings.TG_USERS.items():
-            if k != message.from_user.id:
-                markup.add(types.KeyboardButton('Расходы ' + v + ' в этом месяце'))
+        for tg_user in tg_bot_settings.tg_bot_users:
+            if tg_user.tg_bot_user_id != message.from_user.id:
+                markup.add(types.KeyboardButton('Расходы ' + tg_user.tg_bot_user_name + ' в этом месяце'))
     else:
         output_text = '! Ошибка подключения к БД - бот недоступен !'
     await message.answer(output_text, reply_markup=markup)
@@ -73,7 +87,6 @@ async def view_my_costs(message: types.Message):
     current_month = datetime.datetime.now().month
     current_total = 0
     query = f'SELECT * FROM costs where extract(month from cost_datetime) = \'{current_month}\' and extract(year from cost_datetime) = \'{current_year}\' and user_tg_id=\'{message.from_user.id}\''
-    print('--- INFO --- Выоленение выборки из БД:', query)
     postgres_cursor.execute(query)
     for record in postgres_cursor.fetchall():
         output_text += f'{record[3].strftime("%d")} {record[1]} {record[2]}\n'
@@ -83,15 +96,13 @@ async def view_my_costs(message: types.Message):
 
 @dp.message_handler(regexp='Расходы .+ в этом месяце')
 async def view_my_costs(message: types.Message):
-    another_user_name = message.text.split()[1]
-    another_user_name_index = tuple(bot_settings.TG_USERS.values()).index(another_user_name)
-    another_user_tg_id = tuple(bot_settings.TG_USERS.keys())[another_user_name_index]
+    another_user_name = message.text.split('Расходы ')[1].split(' в этом месяце')[0]
+    another_user_tg_id = next(filter(lambda x: x.tg_bot_user_name == another_user_name, tg_bot_settings.tg_bot_users)).tg_bot_user_id
     output_text = ''
     current_year = datetime.datetime.now().year
     current_month = datetime.datetime.now().month
     current_total = 0
     query = f'SELECT * FROM costs where extract(month from cost_datetime) = \'{current_month}\' and extract(year from cost_datetime) = \'{current_year}\' and user_tg_id=\'{another_user_tg_id}\''
-    print('--- INFO --- Выоленение выборки из БД:', query)
     postgres_cursor.execute(query)
     for record in postgres_cursor.fetchall():
         output_text += f'{record[3].strftime("%d")} {record[1]} {record[2]}\n'
@@ -99,7 +110,7 @@ async def view_my_costs(message: types.Message):
     output_text += f'Всего за месяц: {current_total}'
     await message.answer(output_text)
 
-@dp.message_handler(lambda message: message.from_user.id in bot_settings.TG_USERS)
+@dp.message_handler(lambda message: message.from_user.id in (user.tg_bot_user_id for user in tg_bot_settings.tg_bot_users))
 async def process_regular_message(message: types.Message):
     if postgres_connected:
         try:
@@ -123,6 +134,7 @@ if __name__ == '__main__':
 try:
     postgres_cursor.close()
     postgres_connection.close()
-    print('--- INFO --- Соединение с БД успешно закрыто')
-except:
-    print('--- ERROR --- Проблемы с закрытием соединения с БД')
+    print('Connection to database is closed')
+except Exception as e:
+    print('Error while closing connection to database')
+    raise e

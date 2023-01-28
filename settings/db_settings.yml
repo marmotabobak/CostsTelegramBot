@@ -2,3 +2,5 @@ user: 'postgres'
 psswd: 'postgres'
 host: 'localhost'
 port: 2345
+costs_table: 'costs_personal_cash'
+messages_table: 'messages_personal_cash'

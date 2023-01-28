@@ -27,6 +27,8 @@ class PostgresSettings(Config):
     psswd: str
     host: str
     port: int
+    costs_table: str
+    messages_table: str
 
     class Config:
         allow_mutation = False

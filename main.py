@@ -1,7 +1,6 @@
 #TODO: close Postgres cursors and sessions after use - do it "with..."
 import datetime
 import logging
-import yaml
 
 from aiogram import Bot, Dispatcher, types, executor
 import psycopg2
@@ -19,13 +18,13 @@ class DatabaseInsertError(Exception):
     pass
 
 def write_message_to_db(message_text: str, message_datetime: datetime, user_tg_id: int, postgres_cursor, postgres_connection) -> None:
-    query = f'INSERT INTO messages (message_text, message_datetime, user_tg_id) VALUES (\'{message_text}\', \'{message_datetime}\', \'{user_tg_id}\')'
+    query = f'INSERT INTO {db_settings.messages_table} (message_text, message_datetime, user_tg_id) VALUES (\'{message_text}\', \'{message_datetime}\', \'{user_tg_id}\')'
     postgres_cursor.execute(query)
     postgres_connection.commit()
     logging.info('SERVICE: Message has been recorded to the messages table.')
 
 def write_cost_to_db(cost_name: str, cost_amount: float, cost_datetime: datetime, cost_message: str, user_tg_id: int, postgres_cursor, postgres_connection) -> None:
-    query = f'INSERT INTO costs (cost_name, cost_amount, cost_datetime, cost_message, user_tg_id) VALUES (\'{cost_name}\', {cost_amount}, \'{cost_datetime}\', \'{cost_message}\', \'{user_tg_id}\')'
+    query = f'INSERT INTO {db_settings.costs_table} (cost_name, cost_amount, cost_datetime, cost_message, user_tg_id) VALUES (\'{cost_name}\', {cost_amount}, \'{cost_datetime}\', \'{cost_message}\', \'{user_tg_id}\')'
     postgres_cursor.execute(query)
     postgres_connection.commit()
     logging.info('SERVICE: Message has been recorded to the costs table.')
@@ -66,7 +65,7 @@ async def view_my_costs(message: types.Message):
     current_year = datetime.datetime.now().year
     current_month = datetime.datetime.now().month
     current_total = 0
-    query = f'SELECT * FROM costs where extract(month from cost_datetime) = \'{current_month}\' and extract(year from cost_datetime) = \'{current_year}\' and user_tg_id=\'{message.from_user.id}\''
+    query = f'SELECT * FROM {db_settings.costs_table} where extract(month from cost_datetime) = \'{current_month}\' and extract(year from cost_datetime) = \'{current_year}\' and user_tg_id=\'{message.from_user.id}\''
     postgres_cursor.execute(query)
     for record in postgres_cursor.fetchall():
         output_text += f'{record[3].strftime("%d")} {record[1]} {record[2]}\n'
@@ -82,7 +81,7 @@ async def view_my_costs(message: types.Message):
     current_year = datetime.datetime.now().year
     current_month = datetime.datetime.now().month
     current_total = 0
-    query = f'SELECT * FROM costs where extract(month from cost_datetime) = \'{current_month}\' and extract(year from cost_datetime) = \'{current_year}\' and user_tg_id=\'{another_user_tg_id}\''
+    query = f'SELECT * FROM {db_settings.costs_table} where extract(month from cost_datetime) = \'{current_month}\' and extract(year from cost_datetime) = \'{current_year}\' and user_tg_id=\'{another_user_tg_id}\''
     postgres_cursor.execute(query)
     for record in postgres_cursor.fetchall():
         output_text += f'{record[3].strftime("%d")} {record[1]} {record[2]}\n'

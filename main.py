@@ -6,35 +6,14 @@ import yaml
 from aiogram import Bot, Dispatcher, types, executor
 import psycopg2
 
-from model import TgBotSettings, PostgresSettings, Modules
+import model
+import settings
+
 
 logging.basicConfig(format='[%(asctime)s | %(levelname)s]: %(message)s', datefmt='%m.%d.%Y %H:%M:%S', level=logging.INFO)
 
-
-
-
-def load_from_config(module: Modules):
-    # TODO: parse input command line args here
-    CONFIG_DIR = 'settings/'
-    CONFIG_FILE_PATTERN = '_settings.yml'
-    CONFIG_MODULES = {
-        'bot': TgBotSettings,
-        'db': PostgresSettings
-    }
-
-    settings_file_name = CONFIG_DIR + module.value + CONFIG_FILE_PATTERN
-    with open(settings_file_name, 'r') as settings_file:
-        settings_dict = yaml.safe_load(settings_file)
-        try:
-            settings = CONFIG_MODULES[module.value].parse_obj(settings_dict)
-            logging.info(f'SERVICE: {module.value} config loaded from file: {settings_file_name}')
-        except ValueError as e:
-            logging.error(f'SERVICE: Error while loading {module.value} config from file')
-            raise e
-    return settings
-
-db_settings = load_from_config(Modules.db)
-tg_bot_settings = load_from_config(Modules.bot)
+db_settings = settings.AppSettings(model.Modules.db).settings
+tg_bot_settings = settings.AppSettings(model.Modules.bot).settings
 
 class DatabaseInsertError(Exception):
     pass
@@ -58,6 +37,7 @@ postgres_connection = psycopg2.connect(
     host=db_settings.host,
     port=db_settings.port
 )
+
 postgres_cursor = postgres_connection.cursor()
 logging.info('SERVICE: Connected to database')
 if postgres_cursor:

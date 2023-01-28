@@ -1,13 +1,16 @@
 import psycopg2
 
-from settings import db_settings
+import settings, model
+
+db_settings = settings.AppSettings(model.Modules.db).settings
+print(db_settings)
 
 try:
     postgres_connection = psycopg2.connect(
-        user=db_settings.postgres_user,
-        password=db_settings.postgres_psswd,
-        host=db_settings.postgres_host,
-        port=db_settings.postgres_port
+        user=db_settings.user,
+        password=db_settings.psswd,
+        host=db_settings.host,
+        port=db_settings.port
     )
     posgtres_cursor = postgres_connection.cursor()
     print('--- INFO --- Подулючились к БД для инициализации:', postgres_connection)

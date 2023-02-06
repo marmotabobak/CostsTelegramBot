@@ -17,17 +17,36 @@ tg_bot_settings = settings.AppSettings(model.Modules.bot).settings
 class DatabaseInsertError(Exception):
     pass
 
-def write_message_to_db(message_text: str, message_datetime: datetime, user_tg_id: int, postgres_cursor, postgres_connection) -> None:
+def write_message_to_db(message_text: str, message_datetime: datetime, user_tg_id: int, postgres_cursor, postgres_connection, db_settings) -> None:
     query = f'INSERT INTO {db_settings.messages_table} (message_text, message_datetime, user_tg_id) VALUES (\'{message_text}\', \'{message_datetime}\', \'{user_tg_id}\')'
     postgres_cursor.execute(query)
     postgres_connection.commit()
     logging.info('SERVICE: Message has been recorded to the messages table.')
 
-def write_cost_to_db(cost_name: str, cost_amount: float, cost_datetime: datetime, cost_message: str, user_tg_id: int, postgres_cursor, postgres_connection) -> None:
+def write_cost_to_db(cost_name: str, cost_amount: float, cost_datetime: datetime, cost_message: str, user_tg_id: int, postgres_cursor, postgres_connection, db_settings) -> None:
     query = f'INSERT INTO {db_settings.costs_table} (cost_name, cost_amount, cost_datetime, cost_message, user_tg_id, display) VALUES (\'{cost_name}\', {cost_amount}, \'{cost_datetime}\', \'{cost_message}\', \'{user_tg_id}\', True)'
     postgres_cursor.execute(query)
     postgres_connection.commit()
     logging.info('SERVICE: Message has been recorded to the costs table.')
+
+
+def view_int_display_records_by_user(table_name: str, user_tg_id: int, postgres_cursor) -> tuple:
+    output_text = ''
+    current_total = 0
+    query = f'SELECT * FROM {table_name} where user_tg_id=\'{user_tg_id}\' and display'
+    postgres_cursor.execute(query)
+    for record in postgres_cursor.fetchall():
+        output_text += f'{record[3].strftime("%d.%m.%Y")} {record[1]} {record[2]}\n'
+        current_total += int(record[2])
+    return (output_text, current_total)
+
+def hide_records_by_user(table_name: str, user_tg_id: int, postgres_cursor) -> None:
+    query = f'UPDATE {table_name} SET display = False where user_tg_id=\'{user_tg_id}\''
+    postgres_cursor.execute(query)
+    postgres_connection.commit()
+    logging.info(f'SERVICE: Hided current records of user {user_tg_id}.')
+
+
 
 
 postgres_connection = psycopg2.connect(
@@ -59,32 +78,26 @@ async def process_start_command(message: types.Message):
 
 @dp.message_handler(regexp='Мои расходы')
 async def view_my_costs(message: types.Message):
-    output_text = ''
-    current_total = 0
-    query = f'SELECT * FROM {db_settings.costs_table} where user_tg_id=\'{message.from_user.id}\' and display'
-    postgres_cursor.execute(query)
-    for record in postgres_cursor.fetchall():
-        output_text += f'{record[3].strftime("%d.%m.%Y")} {record[1]} {record[2]}\n'
-        current_total += int(record[2])
-    output_text += f'Всего за период: {current_total}'
+    output_text = view_int_display_records_by_user(table_name=db_settings.costs_table, user_tg_id=message.from_user.id, postgres_cursor=postgres_cursor)
+    output_text = output_text[0] + 'Всего за период: ' + str(output_text[1])
     await message.answer(output_text)
 
 @dp.message_handler(regexp='Обнулить период')
-async def view_my_costs(message: types.Message):
-    query = f'UPDATE {db_settings.costs_table} SET display = False'
-    postgres_cursor.execute(query)
-    output_text = f'Данные обнулены'
+async def hide_old_messages(message: types.Message):
+    output_text = view_int_display_records_by_user(table_name=db_settings.costs_table, user_tg_id=message.from_user.id, postgres_cursor=postgres_cursor)
+    hide_records_by_user(table_name=db_settings.costs_table, user_tg_id=message.from_user.id, postgres_cursor=postgres_cursor)
+    output_text = 'Обнуляемые данные:\n' + output_text[0] + 'Всего за период: ' + str(output_text[1]) + '\n\n Данные обнулены'
     await message.answer(output_text)
 
 @dp.message_handler(lambda message: message.from_user.id in (user.tg_bot_user_id for user in tg_bot_settings.tg_bot_users))
 async def process_regular_message(message: types.Message):
     if postgres_connected:
         try:
-            write_message_to_db(message.text, datetime.datetime.now(), message.from_user.id, postgres_cursor, postgres_connection)
+            write_message_to_db(message.text, datetime.datetime.now(), message.from_user.id, postgres_cursor, postgres_connection, db_settings)
             message_words = message.text.split()
-            cost_name = message_words[0]
-            cost_amount = int(message_words[1])
-            write_cost_to_db(cost_name, cost_amount, datetime.datetime.now(), message.text, message.from_user.id, postgres_cursor, postgres_connection)
+            cost_name = ' '.join(message_words[:-1])
+            cost_amount = int(message_words[-1])
+            write_cost_to_db(cost_name, cost_amount, datetime.datetime.now(), message.text, message.from_user.id, postgres_cursor, postgres_connection, db_settings)
             output_text = f'Внесены данные:\n    время {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")} \n    название {cost_name} \n   сумма {cost_amount} руб. \n'
         except DatabaseInsertError as e:
             output_text = '! Ошибка при записи в БД: ' + str(e)

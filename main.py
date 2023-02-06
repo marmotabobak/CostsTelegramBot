@@ -95,10 +95,10 @@ async def process_regular_message(message: types.Message):
         try:
             write_message_to_db(message.text, datetime.datetime.now(), message.from_user.id, postgres_cursor, postgres_connection)
             message_words = message.text.split()
-            cost_name = message_words[0]
-            cost_amount = int(message_words[1])
+            cost_name = ' '.join(message_words[:-1])
+            cost_amount = int(message_words[-1])
             write_cost_to_db(cost_name, cost_amount, datetime.datetime.now(), message.text, message.from_user.id, postgres_cursor, postgres_connection)
-            output_text = f'Внесены данные:\n    время {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")} \n    название {cost_name} \n   сумма {cost_amount} руб. \n'
+            output_text = f'Внесены данные:\n    время: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")} \n    название: {cost_name} \n    сумма: {cost_amount} руб. \n'
         except DatabaseInsertError as e:
             output_text = '! Ошибка при записи в БД: ' + str(e)
         except:

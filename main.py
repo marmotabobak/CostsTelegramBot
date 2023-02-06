@@ -51,10 +51,10 @@ async def process_start_command(message: types.Message):
     if postgres_connected:
         output_text = 'Введи расход в формате: продукты 500 либо выбери пункт меню'
         markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=1)
-        markup.add(types.KeyboardButton('Мои расходы в этом месяце'))
+        markup.add(types.KeyboardButton('Мои расходы'))
         for tg_user in tg_bot_settings.tg_bot_users:
             if tg_user.tg_bot_user_id != message.from_user.id:
-                markup.add(types.KeyboardButton('Расходы ' + tg_user.tg_bot_user_name + ' в этом месяце'))
+                markup.add(types.KeyboardButton('Расходы ' + tg_user.tg_bot_user_name))
     else:
         output_text = '! Ошибка подключения к БД - бот недоступен !'
     await message.answer(output_text, reply_markup=markup)
@@ -73,9 +73,9 @@ async def view_my_costs(message: types.Message):
     output_text += f'Всего за месяц: {current_total}'
     await message.answer(output_text)
 
-@dp.message_handler(regexp='Расходы .+ в этом месяце')
+@dp.message_handler(regexp='Расходы .+')
 async def view_my_costs(message: types.Message):
-    another_user_name = message.text.split('Расходы ')[1].split(' в этом месяце')[0]
+    another_user_name = message.text.split('Расходы ')[1]
     another_user_tg_id = next(filter(lambda x: x.tg_bot_user_name == another_user_name, tg_bot_settings.tg_bot_users)).tg_bot_user_id
     output_text = ''
     current_year = datetime.datetime.now().year

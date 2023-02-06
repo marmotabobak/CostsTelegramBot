@@ -14,6 +14,7 @@ try:
     )
     posgtres_cursor = postgres_connection.cursor()
     print('--- INFO --- Подулючились к БД для инициализации:', postgres_connection)
+
     query = f'CREATE TABLE IF NOT EXISTS {db_settings.costs_table}' + '''(
             cost_id SERIAL PRIMARY KEY,
             cost_name VARCHAR(255),
@@ -24,7 +25,8 @@ try:
         '''
     posgtres_cursor.execute(query)
     postgres_connection.commit()
-    print('--- INFO --- Таблица costs успешно создана (либо существует)')
+    print(f'--- INFO --- Таблица {db_settings.costs_table} успешно создана (либо существует)')
+
     query = f'CREATE TABLE IF NOT EXISTS {db_settings.messages_table} (' + '''
             message_id SERIAL PRIMARY KEY,
             message_text VARCHAR(255),
@@ -33,7 +35,13 @@ try:
         '''
     posgtres_cursor.execute(query)
     postgres_connection.commit()
-    print('--- INFO --- Таблица messages успешно создана (либо существует)')
+    print(f'--- INFO --- Таблица {db_settings.messages_table} успешно создана (либо существует)')
+
+    query = f'ALTER TABLE {db_settings.costs_table} add column "display" BOOLEAN'
+    posgtres_cursor.execute(query)
+    postgres_connection.commit()
+    print(f'--- INFO --- Таблица {db_settings.costs_table} успешно обновлена (добавлен столбец Display)')
+
 except:
     print('--- ERROR --- Проблема при создании инициализации таблицы costs и/или messages')
 

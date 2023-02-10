@@ -29,6 +29,7 @@ class PostgresSettings(Config):
     port: int
     costs_table: str
     messages_table: str
+    balance_table: str
 
     class Config:
         allow_mutation = False

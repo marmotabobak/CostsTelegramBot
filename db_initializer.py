@@ -37,10 +37,20 @@ try:
     postgres_connection.commit()
     print(f'--- INFO --- Таблица {db_settings.messages_table} успешно создана (либо существует)')
 
-    query = f'ALTER TABLE {db_settings.costs_table} add column "display" BOOLEAN'
+#    query = f'ALTER TABLE {db_settings.costs_table} add column "display" BOOLEAN'
+#    posgtres_cursor.execute(query)
+#    postgres_connection.commit()
+#    print(f'--- INFO --- Таблица {db_settings.costs_table} успешно обновлена (добавлен столбец Display)')
+
+    query = f'CREATE TABLE IF NOT EXISTS {db_settings.balance_table} (' + '''
+            balance_id SERIAL PRIMARY KEY,
+            balance_datetime TIMESTAMP,
+            balance_amount INT,
+            user_tg_id varchar(50));
+        '''
     posgtres_cursor.execute(query)
     postgres_connection.commit()
-    print(f'--- INFO --- Таблица {db_settings.costs_table} успешно обновлена (добавлен столбец Display)')
+    print(f'--- INFO --- Таблица {db_settings.messages_table} успешно создана (либо существует)')
 
 except:
     print('--- ERROR --- Проблема при создании инициализации таблицы costs и/или messages')

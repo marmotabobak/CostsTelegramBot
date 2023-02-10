@@ -81,7 +81,7 @@ async def process_start_command(message: types.Message):
         output_text = 'Расход: продукты 500\nБаланс: баланс 1000'
         markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=1)
         markup.add(types.KeyboardButton('Расходы и баланс'))
-        markup.add(types.KeyboardButton('Обнулить расходы'))
+        markup.add(types.KeyboardButton('Обнулить период'))
     else:
         output_text = '! Ошибка подключения к БД - бот недоступен !'
     await message.answer(output_text, reply_markup=markup)

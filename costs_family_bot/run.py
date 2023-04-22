@@ -119,7 +119,7 @@ async def view_my_costs(message: types.Message) -> None:
 
         session = postgres_engine.session()
         try:
-            stmt = select(Cost).order_by(desc(Cost.ts)).where(
+            stmt = select(Cost).order_by(Cost.ts).where(
                 Cost.user_telegram_id == user_tg_id
             ).where(
                 Cost.ts >= first_day_of_current_month()

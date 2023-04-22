@@ -80,7 +80,7 @@ def current_total_month_costs_by_users() -> str:
         return('!ERR! Ошибка получения данных')
     finally:
         session.close()
-        logging.debug('Postgres session closed')
+        logging.debug('[x] Postgres session closed')
 
 
 @dp.message_handler(commands=['start', 'help'])
@@ -139,7 +139,10 @@ async def view_my_costs(message: types.Message) -> None:
             output_text += f'!ERR! Ошибка чтения из базы данных'
         finally:
             session.close()
-            logging.debug('Postgres session closed')
+            logging.debug('[x] Postgres session closed')
+
+    if not output_text:
+        output_text = 'Данные за период отсутствуют...'
 
     await message.answer(output_text)
 
@@ -159,11 +162,20 @@ async def process_regular_message(message: types.Message):
     except Exception:
         raise
 
-    if cost_name and cost_amount:
-        now_ts = datetime.datetime.now()
-        session = postgres_engine.session()
-        try:
+    now_ts = datetime.datetime.now()
+    session = postgres_engine.session()
 
+    try:
+        session.add(
+            Message(
+                text=message.text,
+                ts=now_ts,
+                user_telegram_id=message.from_user.id
+            )
+        )
+        session.commit()
+
+        if cost_name and cost_amount:
             session.add(
                 Cost(
                     name=cost_name,
@@ -175,31 +187,21 @@ async def process_regular_message(message: types.Message):
             )
             session.commit()
 
-            session.add(
-                Message(
-                    text=message.text,
-                    ts=now_ts,
-                    user_telegram_id=message.from_user.id
-                )
-            )
-            session.commit()
-
-
             output_text = f'Внесены данные:\n    время: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}'\
                           f'\n    название: {cost_name} \n    сумма: {num_with_delimiters(num=cost_amount)} руб.\n'
             output_text += '\n' + current_total_month_costs_by_users()
 
             logging.info('[x] Data added to database')
-        except Exception as e:
-            output_text = '!ERR! Ошибка записи данных в базу'
-            logging.error(f'Error while writing to database: {e}')
-        finally:
-            session.close()
-            logging.debug('Postgres session closed')
+        else:
+            logging.error('Incorrect Type/Value of data to be put in database - skipping...')
+            output_text = 'Некорректные данные: должны быть в формате: (текст) (целое число)'
 
-    else:
-        logging.error('Incorrect Type/Value of data to be put in database - skipping...')
-        output_text = 'Некорректные данные: должны быть в формате: (текст) (целое число)'
+    except Exception as e:
+        output_text = '!ERR! Ошибка записи данных в базу'
+        logging.error(f'Error while writing to database: {e}')
+    finally:
+        session.close()
+        logging.debug('Postgres session closed')
 
     await message.answer(output_text)
 

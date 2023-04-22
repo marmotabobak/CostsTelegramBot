@@ -7,7 +7,7 @@ import datetime
 from aiogram import Bot, Dispatcher, types, executor
 from sqlalchemy import select, desc, func
 
-from model import Config, Cost
+from model import Config, Cost, Message
 from postgres import PostgresEngine
 
 
@@ -156,18 +156,30 @@ async def process_regular_message(message: types.Message):
         raise
 
     if cost_name and cost_amount:
+        now_ts = datetime.datetime.now()
         session = postgres_engine.session()
         try:
+
             session.add(
                 Cost(
                     name=cost_name,
                     amount=cost_amount,
-                    ts=datetime.datetime.now(),
-                    message_text=message.from_user.id,
+                    ts=now_ts,
+                    message_text=message.text,
                     user_telegram_id=message.from_user.id
                 )
             )
             session.commit()
+
+            session.add(
+                Message(
+                    text=message.text,
+                    ts=now_ts,
+                    user_telegram_id=message.from_user.id
+                )
+            )
+            session.commit()
+
 
             output_text = f'Внесены данные:\n    время: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}'\
                           f'\n    название: {cost_name} \n    сумма: {cost_amount} руб. \n'

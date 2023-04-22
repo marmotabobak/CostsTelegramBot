@@ -31,23 +31,11 @@ class Config(BaseModel):
     telegram: TelegramConfig
 
 
-class Cost(Base):
-    __tablename__ = 'costs'
-    __table_args__ = {'schema': 'family_cost_bot'}
+class Deal(Base):
+    __tablename__ = 'deal'
+    __table_args__ = {'schema': 'family_deal_bot'}
 
-    id = Column('cost_id', BigInteger, quote=False, primary_key=True)
-    name = Column('cost_name', Text, quote=False)
-    amount = Column('cost_amount', Integer, quote=False)
-    ts = Column('cost_ts', DateTime, quote=False)
-    message_text = Column('cost_message_text', Text, quote=False)
-    user_telegram_id = Column('user_tg_id', Integer, quote=False)
-
-
-class Message(Base):
-    __tablename__ = 'messages'
-    __table_args__ = {'schema': 'family_cost_bot'}
-
-    id = Column('message_id', BigInteger, quote=False, primary_key=True)
-    text = Column('message_text', Text, quote=False)
-    ts = Column('message_ts', DateTime, quote=False)
+    id = Column('deal_id', BigInteger, quote=False, primary_key=True)
+    name = Column('deal_name', Text, quote=False)
+    ts = Column('deal_ts', DateTime, quote=False)
     user_telegram_id = Column('user_tg_id', Integer, quote=False)

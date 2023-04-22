@@ -5,9 +5,9 @@ import logging
 import datetime
 
 from aiogram import Bot, Dispatcher, types, executor
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, func
 
-from model import Config, Cost, Message
+from model import Config, Deal
 from postgres import PostgresEngine
 
 
@@ -43,6 +43,7 @@ except Exception:
     logging.error(f'[x] Error while initializing Postgres engine')
     raise
 
+postgres_engine.create_all_tables()
 
 def first_day_of_current_month() -> datetime:
     return datetime.datetime(
@@ -56,47 +57,20 @@ def num_with_delimiters(num: int, delimiter: str = ' ') -> str:
     return f'{num:,}'.replace(',', delimiter)
 
 
-def current_total_month_costs_by_users() -> str:
-    global postgres_engine
-    global TG_USERS
-
-    output_text = 'Сумарно за месяц:'
-
-    session = postgres_engine.session()
-    try:
-
-        result = session.query(Cost.user_telegram_id, func.sum(Cost.amount)).group_by(Cost.user_telegram_id).where(
-             Cost.ts >= first_day_of_current_month()
-        ).all()
-
-        for tg_user_id, cost_amount in result:
-            tg_user_name = TG_USERS.get(tg_user_id, tg_user_id)
-            output_text += f'\n    {tg_user_name}: {num_with_delimiters(num=cost_amount)} руб.'
-
-        return output_text
-
-    except Exception as e:
-        logging.error(f'Error while reading database: {e}')
-        return('!ERR! Ошибка получения данных')
-    finally:
-        session.close()
-        logging.debug('Postgres session closed')
-
-
 @dp.message_handler(commands=['start', 'help'])
 async def process_start_command(message: types.Message) -> None:
     global TG_USERS
 
-    output_text = 'Введи расход в формате: продукты 500 либо выбери пункт меню'
+    output_text = 'Введи бытовое дело в виде текстового сообщения'
     markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=1)
-    markup.add(types.KeyboardButton('Мои расходы в этом месяце'))
+    markup.add(types.KeyboardButton('Мои дела в этом месяце'))
     for tg_user_id, tg_user_name in TG_USERS.items():
         if tg_user_id != message.from_user.id:
-            markup.add(types.KeyboardButton('Расходы ' + tg_user_name + ' в этом месяце'))
+            markup.add(types.KeyboardButton('Дела ' + tg_user_name + ' в этом месяце'))
     await message.answer(output_text, reply_markup=markup)
 
 
-@dp.message_handler(regexp=r'.+асходы .*в этом месяце')
+@dp.message_handler(regexp=r'.+ела .*в этом месяце')
 async def view_my_costs(message: types.Message) -> None:
 
     global postgres_engine
@@ -105,10 +79,10 @@ async def view_my_costs(message: types.Message) -> None:
     output_text = ''
 
     try:
-        if 'Мои расходы' in message.text:
+        if 'Мои дела' in message.text:
             user_tg_id = message.from_user.id
         else:
-            another_user_name = message.text.split('Расходы ')[1].split(' в этом месяце')[0]
+            another_user_name = message.text.split('Дела ')[1].split(' в этом месяце')[0]
             user_tg_id = int(next(filter(lambda x: TG_USERS[x] == another_user_name, TG_USERS.keys())))
     except IndexError as e:
         user_tg_id = None
@@ -119,27 +93,27 @@ async def view_my_costs(message: types.Message) -> None:
 
     if user_tg_id:
         output_text = ''
-        current_total = 0
 
         session = postgres_engine.session()
         try:
-            stmt = select(Cost).order_by(Cost.ts).where(
-                Cost.user_telegram_id == user_tg_id
+            stmt = select(Deal).order_by(Deal.ts).where(
+                Deal.user_telegram_id == user_tg_id
             ).where(
-                Cost.ts >= first_day_of_current_month()
+                Deal.ts >= first_day_of_current_month()
             )
 
-            for cost in session.scalars(stmt):
-                output_text += f'{cost.ts.strftime("%d")} {cost.name} {num_with_delimiters(num=cost.amount)}\n'
-                current_total += cost.amount
+            for deal in session.scalars(stmt):
+                output_text += f'{deal.ts.strftime("%d")} {deal.name}\n'
 
-            output_text += f'Всего за месяц: {num_with_delimiters(num=current_total)}'
         except Exception as e:
             logging.error(f'Error while reading database: {e}')
             output_text += f'!ERR! Ошибка чтения из базы данных'
         finally:
             session.close()
-            logging.debug('Postgres session closed')
+            logging.debug('[x] Postgres session closed')
+
+    if not output_text:
+        output_text = 'Данных за период нет...'
 
     await message.answer(output_text)
 
@@ -150,44 +124,22 @@ async def view_my_costs(message: types.Message) -> None:
 async def process_regular_message(message: types.Message):
     global postgres_engine
 
-    try:
-        message_text_words = message.text.split()
-        cost_name = ' '.join(message_text_words[:-1])
-        cost_amount = int(message_text_words[-1])
-    except (TypeError, ValueError):
-        cost_name, cost_amount = None, None
-    except Exception:
-        raise
-
-    if cost_name and cost_amount:
+    if message.text:
         now_ts = datetime.datetime.now()
         session = postgres_engine.session()
         try:
 
             session.add(
-                Cost(
-                    name=cost_name,
-                    amount=cost_amount,
-                    ts=now_ts,
-                    message_text=message.text,
-                    user_telegram_id=message.from_user.id
-                )
-            )
-            session.commit()
-
-            session.add(
-                Message(
-                    text=message.text,
+                Deal(
+                    name=message.text,
                     ts=now_ts,
                     user_telegram_id=message.from_user.id
                 )
             )
             session.commit()
 
-
-            output_text = f'Внесены данные:\n    время: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}'\
-                          f'\n    название: {cost_name} \n    сумма: {num_with_delimiters(num=cost_amount)} руб.\n'
-            output_text += '\n' + current_total_month_costs_by_users()
+            output_text = f'Внесено дело:\n    время: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}'\
+                          f'\n    название: {message.text}'
 
             logging.info('[x] Data added to database')
         except Exception as e:
@@ -195,11 +147,11 @@ async def process_regular_message(message: types.Message):
             logging.error(f'Error while writing to database: {e}')
         finally:
             session.close()
-            logging.debug('Postgres session closed')
+            logging.debug('[x] Postgres session closed')
 
     else:
-        logging.error('Incorrect Type/Value of data to be put in database - skipping...')
-        output_text = 'Некорректные данные: должны быть в формате: (текст) (целое число)'
+        logging.error('Empty data - skipping...')
+        output_text = 'Пустое значение - пропускаю...'
 
     await message.answer(output_text)
 

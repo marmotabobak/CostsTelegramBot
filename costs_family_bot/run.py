@@ -52,6 +52,10 @@ def first_day_of_current_month() -> datetime:
     )
 
 
+def num_with_delimiters(num: int, delimiter: str = ' ') -> str:
+    return f'{num:,}'.replace(',', delimiter)
+
+
 def current_total_month_costs_by_users() -> str:
     global postgres_engine
     global TG_USERS
@@ -67,7 +71,7 @@ def current_total_month_costs_by_users() -> str:
 
         for tg_user_id, cost_amount in result:
             tg_user_name = TG_USERS.get(tg_user_id, tg_user_id)
-            output_text += f'\n    {tg_user_name}: {cost_amount} руб.'
+            output_text += f'\n    {tg_user_name}: {num_with_delimiters(num=cost_amount)} руб.'
 
         return output_text
 
@@ -126,10 +130,10 @@ async def view_my_costs(message: types.Message) -> None:
             )
 
             for cost in session.scalars(stmt):
-                output_text += f'{cost.ts.strftime("%d")} {cost.name} {cost.amount}\n'
+                output_text += f'{cost.ts.strftime("%d")} {cost.name} {num_with_delimiters(num=cost.amount)}\n'
                 current_total += cost.amount
 
-            output_text += f'Всего за месяц: {current_total}'
+            output_text += f'Всего за месяц: {num_with_delimiters(num=current_total)}'
         except Exception as e:
             logging.error(f'Error while reading database: {e}')
             output_text += f'!ERR! Ошибка чтения из базы данных'
@@ -182,8 +186,8 @@ async def process_regular_message(message: types.Message):
 
 
             output_text = f'Внесены данные:\n    время: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}'\
-                          f'\n    название: {cost_name} \n    сумма: {cost_amount} руб. \n'
-            output_text += '\n\n' + current_total_month_costs_by_users()
+                          f'\n    название: {cost_name} \n    сумма: {num_with_delimiters(num=cost_amount)} руб.\n'
+            output_text += '\n' + current_total_month_costs_by_users()
 
             logging.info('[x] Data added to database')
         except Exception as e:

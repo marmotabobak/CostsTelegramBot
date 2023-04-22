@@ -1,0 +1,17 @@
+db:
+  host: 'localhost'
+  port: 5432
+  user: 'postgres'
+  password: 'postgres'
+  db_name: 'postgres'
+telegram:
+  tg_bot_api_token: "5635052744:AAE4Clt7M24u8in1v33V5XGstbh_2Xx2fKw"
+  tg_bot_admins:
+    - 102261660
+  tg_bot_users:
+    - tg_bot_user_id: 102261660
+      tg_bot_user_name: "Igor"
+    - tg_bot_user_id: 5898130100
+      tg_bot_user_name: 'Igor Tinkoff'
+    - tg_bot_user_id: 123456789
+      tg_bot_user_name: 'Igor KZ'

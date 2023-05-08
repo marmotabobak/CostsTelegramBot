@@ -3,6 +3,7 @@
 import yaml
 import logging
 import datetime
+from typing import Dict
 
 from aiogram import Bot, Dispatcher, types, executor
 from sqlalchemy import select, desc, func
@@ -127,10 +128,14 @@ async def view_my_costs(message: types.Message) -> None:
     output_text = ''
 
     try:
+        day_from = first_day_of_current_month()
+        day_to = last_day_of_current_month()
         if message.text == 'Мои расходы в этом месяце':
             user_tg_ids = {message.from_user.id: 'Мои расходы'}
         elif message.text == 'Отчет по расходам за прошлый месяц':
             user_tg_ids = TG_USERS
+            day_from = first_day_of_last_month()
+            day_to = last_day_of_last_month()
         elif 'Расходы ' in message.text:
             another_user_name = message.text.split('Расходы ')[1].split(' в этом месяце')[0]
             user_tg_ids = {
@@ -145,7 +150,7 @@ async def view_my_costs(message: types.Message) -> None:
     except Exception:
         raise
 
-    current_total_dict = {}
+    users_costs = {}
 
     try:
         session = postgres_engine.session()
@@ -157,9 +162,9 @@ async def view_my_costs(message: types.Message) -> None:
             stmt = select(Cost).order_by(Cost.ts).where(
                 Cost.user_telegram_id == user_tg_id
             ).where(
-                Cost.ts >= first_day_of_current_month()
+                Cost.ts >= day_from
             ).where(
-                Cost.ts <= last_day_of_current_month()
+                Cost.ts <= day_to
             )
 
             for cost in session.scalars(stmt):
@@ -171,17 +176,20 @@ async def view_my_costs(message: types.Message) -> None:
             else:
                 output_text += 'Данные за период отсутствуют'
 
-            current_total_dict[user_tg_id] = current_total
+            users_costs[user_tg_id] = current_total
 
             await message.answer(output_text)
 
-        if len(user_tg_ids) > 1:
-            output_text = f'Итого за прошлый месяц: {num_with_delimiters(sum(current_total_dict.values()))}'
-            max_cost = max(current_total_dict.values())
+        if len(user_tg_ids) == 2:
+            output_text = f'Итого за прошлый месяц: {num_with_delimiters(sum(users_costs.values()))}'
             for user_tg_id, user_name in user_tg_ids.items():
-                output_text += f'\n{user_name} {num_with_delimiters(current_total_dict[user_tg_id])}'
-                output_text += f'({int((max_cost - current_total_dict[user_tg_id]) / len(user_tg_ids))})'
+                output_text += f'\n{user_name}: {num_with_delimiters(users_costs[user_tg_id])}'
+                to_extra_pay = int((max(users_costs.values()) - users_costs[user_tg_id]) / 2)
+                output_text += f' (+ {to_extra_pay})' if to_extra_pay else ''
             await message.answer(output_text)
+        elif len(user_tg_ids) > 2:
+            # TODO: calculate extrapay distributaion among users
+            pass
 
     except Exception as e:
         logging.error(f'Error while reading database: {e}')

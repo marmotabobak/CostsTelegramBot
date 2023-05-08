@@ -1,5 +1,5 @@
 from sqlalchemy.orm import declarative_base
-from sqlalchemy import Column, BigInteger, Text, Integer, DateTime
+from sqlalchemy import Column, BigInteger, Text, Integer, DateTime, BIGINT
 from pydantic import BaseModel
 from typing import List
 
@@ -40,7 +40,7 @@ class Cost(Base):
     amount = Column('cost_amount', Integer, quote=False)
     ts = Column('cost_ts', DateTime, quote=False)
     message_text = Column('cost_message_text', Text, quote=False)
-    user_telegram_id = Column('user_tg_id', Integer, quote=False)
+    user_telegram_id = Column('user_tg_id', BIGINT, quote=False)
 
 
 class Message(Base):
@@ -50,4 +50,4 @@ class Message(Base):
     id = Column('message_id', BigInteger, quote=False, primary_key=True)
     text = Column('message_text', Text, quote=False)
     ts = Column('message_ts', DateTime, quote=False)
-    user_telegram_id = Column('user_tg_id', Integer, quote=False)
+    user_telegram_id = Column('user_tg_id', BIGINT, quote=False)

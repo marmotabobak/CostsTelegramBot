@@ -52,6 +52,27 @@ def first_day_of_current_month() -> datetime:
     )
 
 
+def last_day_of_current_month() -> datetime:
+    next_month_datetime = first_day_of_current_month() + datetime.timedelta(days=32)
+    return datetime.datetime(
+        year=next_month_datetime.year,
+        month=next_month_datetime.month,
+        day=1
+    ) - datetime.timedelta(days=1)
+
+
+def last_day_of_last_month() -> datetime:
+    return first_day_of_current_month() - datetime.timedelta(days=1)
+
+
+def first_day_of_last_month() -> datetime:
+    return datetime.datetime(
+        year=last_day_of_last_month().year,
+        month=last_day_of_last_month().month,
+        day=1
+    )
+
+
 def num_with_delimiters(num: int, delimiter: str = ' ') -> str:
     return f'{num:,}'.replace(',', delimiter)
 
@@ -77,7 +98,7 @@ def current_total_month_costs_by_users() -> str:
 
     except Exception as e:
         logging.error(f'Error while reading database: {e}')
-        return('!ERR! Ошибка получения данных')
+        return '!ERR! Ошибка получения данных'
     finally:
         session.close()
         logging.debug('[x] Postgres session closed')
@@ -93,10 +114,11 @@ async def process_start_command(message: types.Message) -> None:
     for tg_user_id, tg_user_name in TG_USERS.items():
         if tg_user_id != message.from_user.id:
             markup.add(types.KeyboardButton('Расходы ' + tg_user_name + ' в этом месяце'))
+    markup.add(types.KeyboardButton('Отчет по расходам за прошлый месяц'))
     await message.answer(output_text, reply_markup=markup)
 
 
-@dp.message_handler(regexp=r'.+асходы .*в этом месяце')
+@dp.message_handler(regexp=r'.+асход.* месяц.?')
 async def view_my_costs(message: types.Message) -> None:
 
     global postgres_engine
@@ -105,46 +127,109 @@ async def view_my_costs(message: types.Message) -> None:
     output_text = ''
 
     try:
-        if 'Мои расходы' in message.text:
-            user_tg_id = message.from_user.id
-        else:
+        if message.text == 'Мои расходы в этом месяце':
+            user_tg_ids = {message.from_user.id: 'Мои расходы'}
+        elif message.text == 'Отчет по расходам за прошлый месяц':
+            user_tg_ids = TG_USERS
+        elif 'Расходы ' in message.text:
             another_user_name = message.text.split('Расходы ')[1].split(' в этом месяце')[0]
-            user_tg_id = int(next(filter(lambda x: TG_USERS[x] == another_user_name, TG_USERS.keys())))
-    except IndexError as e:
-        user_tg_id = None
-        logging.error(f'Error while parsing button text for user_name: {e}')
-        output_text = f'!ERR! Ошибка определения имени пользователя'
+            user_tg_ids = {
+                int(next(filter(lambda x: TG_USERS[x] == another_user_name, TG_USERS.keys()))): another_user_name
+            }
+        else:
+            raise ValueError
+    except (IndexError, ValueError) as e:
+        user_tg_ids = []
+        logging.error(f'Error while parsing button message text: {e}')
+        output_text = f'!ERR! Ошибка парсинга сообщения'
     except Exception:
         raise
 
-    if user_tg_id:
-        output_text = ''
-        current_total = 0
+    current_total_dict = {}
 
+    try:
         session = postgres_engine.session()
-        try:
+
+        for user_tg_id, user_name in user_tg_ids.items():
+            output_text = f'{user_name}:\n'
+            current_total = 0
+
             stmt = select(Cost).order_by(Cost.ts).where(
                 Cost.user_telegram_id == user_tg_id
             ).where(
                 Cost.ts >= first_day_of_current_month()
+            ).where(
+                Cost.ts <= last_day_of_current_month()
             )
 
             for cost in session.scalars(stmt):
                 output_text += f'{cost.ts.strftime("%d")} {cost.name} {num_with_delimiters(num=cost.amount)}\n'
                 current_total += cost.amount
 
-            output_text += f'Всего за месяц: {num_with_delimiters(num=current_total)}'
-        except Exception as e:
-            logging.error(f'Error while reading database: {e}')
-            output_text += f'!ERR! Ошибка чтения из базы данных'
-        finally:
-            session.close()
-            logging.debug('[x] Postgres session closed')
+            if current_total:
+                output_text += f'Всего за месяц: {num_with_delimiters(num=current_total)}'
+            else:
+                output_text += 'Данные за период отсутствуют'
 
-    if not output_text:
-        output_text = 'Данные за период отсутствуют...'
+            current_total_dict[user_tg_id] = current_total
 
-    await message.answer(output_text)
+            await message.answer(output_text)
+
+        if len(user_tg_ids) > 1:
+            output_text = f'Итого за прошлый месяц: {num_with_delimiters(sum(current_total_dict.values()))}'
+            max_cost = max(current_total_dict.values())
+            for user_tg_id, user_name in user_tg_ids.items():
+                output_text += f'\n{user_name} {num_with_delimiters(current_total_dict[user_tg_id])}'
+                output_text += f'({int((max_cost - current_total_dict[user_tg_id]) / len(user_tg_ids))})'
+            await message.answer(output_text)
+
+    except Exception as e:
+        logging.error(f'Error while reading database: {e}')
+        output_text += f'!ERR! Ошибка чтения из базы данных'
+    finally:
+        session.close()
+        logging.debug('[x] Postgres session closed')
+
+
+@dp.message_handler(regexp=r'Отчет за прошлый месяц')
+async def view_my_costs(message: types.Message) -> None:
+
+    global postgres_engine
+    global TG_USERS
+
+    try:
+        session = postgres_engine.session()
+
+        for user_tg_id, user_name in TG_USERS.items():
+            output_text = f'{user_name}:\n'
+            current_total = 0
+
+            stmt = select(Cost).order_by(Cost.ts).where(
+                Cost.user_telegram_id == user_tg_id
+            ).where(
+                Cost.ts >= first_day_of_last_month()
+            ).where(
+                Cost.ts <= last_day_of_last_month()
+            )
+
+            for cost in session.scalars(stmt):
+                output_text += f'{cost.ts.strftime("%d")} {cost.name} {num_with_delimiters(num=cost.amount)}\n'
+                current_total += cost.amount
+            if current_total:
+                output_text += f'Всего за месяц: {num_with_delimiters(num=current_total)}'
+            else:
+                output_text += 'Данные за период отсутствуют'
+
+            await message.answer(output_text)
+
+    except Exception as e:
+        logging.error(f'Error while reading database: {e}')
+        output_text += f'!ERR! Ошибка чтения из базы данных'
+    finally:
+        session.close()
+        logging.debug('[x] Postgres session closed')
+
+
 
 
 @dp.message_handler(lambda message: message.from_user.id in (

@@ -53,13 +53,17 @@ def first_day_of_current_month() -> datetime:
     )
 
 
-def last_day_of_current_month() -> datetime:
+def first_day_of_next_month() -> datetime:
     next_month_datetime = first_day_of_current_month() + datetime.timedelta(days=32)
     return datetime.datetime(
         year=next_month_datetime.year,
         month=next_month_datetime.month,
         day=1
-    ) - datetime.timedelta(days=1)
+    )
+
+
+def last_day_of_current_month() -> datetime:
+    return first_day_of_next_month() - datetime.timedelta(days=1)
 
 
 def last_day_of_last_month() -> datetime:
@@ -135,13 +139,13 @@ async def view_my_costs(message: types.Message) -> None:
 
     try:
         day_from = first_day_of_current_month()
-        day_to = last_day_of_current_month()
+        day_to = first_day_of_next_month()
         month_name = get_month_name(day_from.month)
         if message.text == 'Мои расходы в этом месяце':
             users = {message.from_user.id: TG_USERS[message.from_user.id]}
         elif message.text == 'Отчет по расходам за прошлый месяц':
             day_from = first_day_of_last_month()
-            day_to = last_day_of_last_month()
+            day_to = first_day_of_current_month()
             month_name = get_month_name(day_from.month)
             users = TG_USERS
         elif 'Расходы ' in message.text:
@@ -165,7 +169,7 @@ async def view_my_costs(message: types.Message) -> None:
                 ).where(
                     Cost.ts >= day_from
                 ).where(
-                    Cost.ts <= day_to
+                    Cost.ts < day_to
                 )
 
                 for cost in session.scalars(stmt):

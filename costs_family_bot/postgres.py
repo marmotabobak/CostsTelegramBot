@@ -5,7 +5,6 @@ import random
 
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
-from sqlalchemy.schema import CreateSchema
 
 from model import DatabaseConfig, Base, Cost
 

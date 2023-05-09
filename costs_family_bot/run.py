@@ -2,14 +2,16 @@
 # TODO: Refactor with classes in outer modules (how to pass dp and how not to use global postgres_engine)
 import yaml
 import logging
-import datetime
-from typing import Dict
+from pathlib import Path
+import argparse
+import os
 
 from aiogram import Bot, Dispatcher, types, executor
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, func
 
 from model import Config, Cost, Message
 from postgres import PostgresEngine
+from funcs import *
 
 
 logging.basicConfig(
@@ -18,10 +20,18 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-CONFIG_FILE_PATH = '../configs/dev.yml'
+parser = argparse.ArgumentParser()
+parser.add_argument('--config', '-c', type=str, help='config path')
+args = parser.parse_args()
+config_path_str = args.config or os.environ.get('APP_CONFIG_PATH')
 
-logging.info(f'Starting service with config {CONFIG_FILE_PATH}')
-with open(CONFIG_FILE_PATH) as f:
+if config_path_str:
+    config_path = Path(config_path_str).resolve()
+    logging.info(f'Starting service with config {config_path}')
+else:
+    raise ValueError('App config path should be provided in -c argument')
+
+with open(config_path) as f:
     data = yaml.safe_load(f)
 
 config = Config.parse_obj(data)
@@ -43,43 +53,6 @@ try:
 except Exception:
     logging.error(f'[x] Error while initializing Postgres engine')
     raise
-
-
-def first_day_of_current_month() -> datetime:
-    return datetime.datetime(
-        year=datetime.datetime.now().year,
-        month=datetime.datetime.now().month,
-        day=1
-    )
-
-
-def first_day_of_next_month() -> datetime:
-    next_month_datetime = first_day_of_current_month() + datetime.timedelta(days=32)
-    return datetime.datetime(
-        year=next_month_datetime.year,
-        month=next_month_datetime.month,
-        day=1
-    )
-
-
-def last_day_of_current_month() -> datetime:
-    return first_day_of_next_month() - datetime.timedelta(days=1)
-
-
-def last_day_of_last_month() -> datetime:
-    return first_day_of_current_month() - datetime.timedelta(days=1)
-
-
-def first_day_of_last_month() -> datetime:
-    return datetime.datetime(
-        year=last_day_of_last_month().year,
-        month=last_day_of_last_month().month,
-        day=1
-    )
-
-
-def num_with_delimiters(num: int, delimiter: str = ' ') -> str:
-    return f'{num:,}'.replace(',', delimiter)
 
 
 def current_total_month_costs_by_users() -> str:
@@ -107,12 +80,6 @@ def current_total_month_costs_by_users() -> str:
     finally:
         session.close()
         logging.debug('[x] Postgres session closed')
-
-
-def get_month_name(month_num: int) -> str:
-    month = ('январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
-             'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь')
-    return month[month_num-1]
 
 
 @dp.message_handler(commands=['start', 'help'])
@@ -227,7 +194,7 @@ async def process_regular_message(message: types.Message):
     except Exception:
         raise
 
-    now_ts = datetime.datetime.now()
+    now_ts = datetime_now()
     session = postgres_engine.session()
 
     try:
@@ -252,7 +219,7 @@ async def process_regular_message(message: types.Message):
             )
             session.commit()
 
-            output_text = f'Внесены данные:\n    время: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}'\
+            output_text = f'Внесены данные:\n    время: {datetime_now().strftime("%d.%m.%Y %H:%M")}'\
                           f'\n    название: {cost_name} \n    сумма: {num_with_delimiters(num=cost_amount)} руб.\n'
             output_text += '\n' + current_total_month_costs_by_users()
 

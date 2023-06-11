@@ -3,3 +3,4 @@ configs/test.yml
 docker-compose.yml
 requirements.txt
 **/__pycache__
+.idea/

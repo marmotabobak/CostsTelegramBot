@@ -1,0 +1,12 @@
+services:
+  postgres_CostsTelegramBot_Family:
+    image: "postgres"
+    container_name: "postgres_CostsTelegramBot"
+    restart: "on-failure"
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+      POSTGRES_DB: "postgres"
+      POSTGRES_HOST_AUTH_METHOD: "password"
+    ports:
+      - "5432:5432"

@@ -1,0 +1,5 @@
+configs/dev.yml
+configs/test.yml
+docker-compose.yml
+requirements.txt
+**/__pycache__

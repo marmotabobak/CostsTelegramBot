@@ -50,6 +50,7 @@ except Exception:
 
 try:
     postgres_engine = PostgresEngine(config=config.db)
+    # postgres_engine.drop_and_create_all_tables()
 except Exception:
     logging.error(f'[x] Error while initializing Postgres engine')
     raise
